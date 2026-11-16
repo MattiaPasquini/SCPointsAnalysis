@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SC Points Analysis</title>
   <!-- Bump ?v= on every CSS/JS link (both pages) when you change those files, so browsers fetch the new version. -->
-  <link rel="stylesheet" href="css/style.css?v=5">
+  <link rel="stylesheet" href="css/style.css?v=6">
 </head>
 <body>
   <header>
@@ -34,7 +34,7 @@
           Linear + podium bonus: <code>100 × (N − r) / (N − 1)</code>, plus +20 / +10 / +5 for 1st / 2nd / 3rd
         </label>
       </fieldset>
-      <fieldset id="scope-options">
+      <fieldset>
         <legend>Who gets points in an event</legend>
         <label>
           <input type="radio" name="scope" value="finalists" checked>
@@ -64,7 +64,9 @@
           </label>
           <p class="hint">At most 75% of the round before the final can qualify; a bigger number is cut down to 75%.
             People who were in the real final keep their final result; extra qualifiers are ranked after them by their
-            place in the previous round. One-round events are unchanged. While this is on, “Who gets points” is ignored.</p>
+            place in the previous round. One-round events are unchanged. “Who gets points” still applies: with
+            “Only finalists” only the custom finalists score; with “Everyone in the event” the custom finalists are
+            ranked first, then everyone else by how far they got (at most the round before the final).</p>
         </fieldset>
       </fieldset>
       <p class="hint">r = place, N = number of ranked competitors. 1st gets 100, last gets 0 (before any podium bonus).
@@ -82,7 +84,7 @@
       &copy; <span id="year"></span> SC Points Analysis</p>
   </footer>
 
-  <script src="js/points.js?v=5" defer></script>
-  <script src="js/main.js?v=5" defer></script>
+  <script src="js/points.js?v=6" defer></script>
+  <script src="js/main.js?v=6" defer></script>
 </body>
 </html>

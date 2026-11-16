@@ -97,17 +97,35 @@ function eventPoints(rows, { formula, scope, whatIf }) {
     const realFinal = new Map(rows.filter((r) => roundOrder(r) === finalOrder).map((r) => [r.wca_id, r]));
     const size = whatIfFinalSize(prevRows.length, whatIf);
     const qualifiers = whatIfQualifiers(prevRows, size);
+    // `order` here is a ranking tier: custom finalists sit above every real round.
+    const FINAL_TIER = 100;
     for (const [wcaId, prevPos] of qualifiers) {
       const f = realFinal.get(wcaId);
-      const entry = f ? { order: 1, pos: f.pos, valid: f.best > 0 } : { order: 0, pos: prevPos, valid: true };
+      const entry = f
+        ? { order: FINAL_TIER + 1, pos: f.pos, valid: f.best > 0 }
+        : { order: FINAL_TIER, pos: prevPos, valid: true };
       if (entry.valid) ranked.push({ wcaId, ...entry });
+    }
+    if (scope === "everyone") {
+      // Everyone else, ranked by how far they got with the custom final in place:
+      // nobody outside it got further than the round before the final.
+      const prevByPerson = new Map(prevRows.map((r) => [r.wca_id, r]));
+      for (const [wcaId, entry] of last) {
+        if (qualifiers.has(wcaId)) continue;
+        let capped = entry;
+        if (entry.order > prevOrder) {
+          const p = prevByPerson.get(wcaId);
+          if (!p) continue;
+          capped = { order: prevOrder, pos: p.pos, valid: p.best > 0 };
+        }
+        if (capped.valid) ranked.push({ wcaId, ...capped });
+      }
     }
     final = { real: realFinal.size, custom: qualifiers.size };
   } else {
-    // Real rounds. With the what-if on, this branch only handles one-round
-    // events, whose single round is the final; "Who gets points" is ignored.
+    // Real rounds (also one-round events when the what-if is on).
     for (const [wcaId, entry] of last) {
-      const eligible = (!whatIf && scope === "everyone") || entry.order === finalOrder;
+      const eligible = scope === "everyone" || entry.order === finalOrder;
       if (eligible && entry.valid) ranked.push({ wcaId, ...entry });
     }
   }
@@ -271,7 +289,7 @@ function renderCompetition(comp, results, options) {
     const changed = events.filter((e) => finals[e]);
     const oneRound = events.filter((e) => !finals[e]);
     const parts = changed.map((e) => `${EVENTS[e] || e} ${finals[e].real} → ${finals[e].custom}`);
-    let text = `What-if final (${whatIfSummary(options.whatIf)}), finalists real → what-if: ${parts.join(" · ") || "none"}`;
+    let text = `What-if final (${whatIfSummary(options)}), finalists real → what-if: ${parts.join(" · ") || "none"}`;
     if (oneRound.length) text += `. One-round events unchanged: ${oneRound.map((e) => EVENTS[e] || e).join(", ")}`;
     content.push(el("p", { className: "what-if-note", textContent: text + "." }));
   }
@@ -292,7 +310,7 @@ function renderOverall(dataById, options) {
       ` = top ${FINALIST_SPOTS} by total among competitors with at least ${FINALIST_MIN_COMPS} competitions (${finalists} with the current options, ties included).`,
     ]),
     ...(options.whatIf
-      ? [el("p", { className: "what-if-note", textContent: `What-if final is on: ${whatIfSummary(options.whatIf)} in every event with 2+ rounds. Open a competition tab to see each event's final size.` })]
+      ? [el("p", { className: "what-if-note", textContent: `What-if final is on (${whatIfSummary(options)}). It applies to every event with 2+ rounds; open a competition tab to see each event's final size.` })]
       : []),
     pointsTable(columns, rankRows(people), (p, key) => p.byComp[key], [compsColumn]),
   ];
@@ -325,17 +343,16 @@ function currentOptions(form) {
   return { formula: data.get("formula"), scope: data.get("scope"), whatIf };
 }
 
-/** Enable/disable the what-if inputs and the "Who gets points" choice to match the switch. */
+/** Enable/disable the what-if inputs to match the switch. */
 function syncWhatIfControls(form) {
-  const on = form.elements.whatIf.checked;
-  document.getElementById("what-if-body").disabled = !on;
-  document.getElementById("scope-options").disabled = on;
+  document.getElementById("what-if-body").disabled = !form.elements.whatIf.checked;
 }
 
-function whatIfSummary(whatIf) {
-  return whatIf.mode === "percent"
+function whatIfSummary({ whatIf, scope }) {
+  const size = whatIf.mode === "percent"
     ? `top ${whatIf.value}% of the round before the final`
     : `top ${whatIf.value} of the round before the final`;
+  return `${size}; ${scope === "everyone" ? "everyone in the event scores" : "only the custom finalists score"}`;
 }
 
 async function main() {
