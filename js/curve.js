@@ -18,7 +18,8 @@ function svg(tag, attrs = {}, text) {
   return node;
 }
 
-const linear = (r, n) => (100 * (n - r)) / (n - 1);
+const Y_MAX = 120; // room for the podium bonus
+const SERIES = ["steep", "gentle", "linearPodium"];
 
 /** A "nice" tick step so the x axis shows roughly 10 labels. */
 function tickStep(n) {
@@ -33,10 +34,10 @@ function drawChart(n) {
   root.replaceChildren();
 
   const x = (r) => M.left + ((r - 1) / (n - 1)) * PW;
-  const y = (p) => M.top + (1 - p / 100) * PH;
+  const y = (p) => M.top + (1 - p / Y_MAX) * PH;
 
   // Y grid and labels.
-  for (let p = 0; p <= 100; p += 20) {
+  for (let p = 0; p <= Y_MAX; p += 20) {
     root.append(svg("line", { class: "grid", x1: M.left, x2: M.left + PW, y1: y(p), y2: y(p) }));
     root.append(svg("text", { class: "axis-label", x: M.left - 8, y: y(p) + 4, "text-anchor": "end" }, String(p)));
   }
@@ -61,17 +62,15 @@ function drawChart(n) {
 
   // Lines.
   const places = Array.from({ length: n }, (_, i) => i + 1);
-  const path = (f) => places.map((r, i) => `${i ? "L" : "M"}${x(r).toFixed(1)},${y(f(r, n)).toFixed(1)}`).join("");
-  root.append(svg("path", { class: "line linear", d: path(linear) }));
-  root.append(svg("path", { class: "line steep", d: path(FORMULAS.steep) }));
-  root.append(svg("path", { class: "line gentle", d: path(FORMULAS.gentle) }));
+  const path = (key) => places.map((r, i) => `${i ? "L" : "M"}${x(r).toFixed(1)},${y(pointsFor(r, n, key)).toFixed(1)}`).join("");
+  for (const key of SERIES) root.append(svg("path", { class: `line ${key}`, d: path(key) }));
 
   // Dots when there is room for them.
   if (n <= 50) {
     const radius = n <= 20 ? 4 : 3;
-    for (const key of ["steep", "gentle"]) {
+    for (const key of SERIES) {
       for (const r of places) {
-        root.append(svg("circle", { class: `dot ${key}`, cx: x(r), cy: y(FORMULAS[key](r, n)), r: radius }));
+        root.append(svg("circle", { class: `dot ${key}`, cx: x(r), cy: y(pointsFor(r, n, key)), r: radius }));
       }
     }
   }
@@ -97,6 +96,8 @@ function drawChart(n) {
       `Steep: ${pointsFor(r, n, "steep").toFixed(1)}`,
       document.createElement("br"),
       `Gentle: ${pointsFor(r, n, "gentle").toFixed(1)}`,
+      document.createElement("br"),
+      `Linear + podium: ${pointsFor(r, n, "linearPodium").toFixed(1)}`,
     );
     tooltip.hidden = false;
     const left = x(r) / scale;
@@ -119,6 +120,7 @@ function drawTable(n) {
       ["num", String(r)],
       ["pts", pointsFor(r, n, "steep").toFixed(1)],
       ["pts", pointsFor(r, n, "gentle").toFixed(1)],
+      ["pts", pointsFor(r, n, "linearPodium").toFixed(1)],
     ]) {
       const td = document.createElement("td");
       td.className = cls;
@@ -139,7 +141,10 @@ function drawSummary(n) {
     `With ${n} ranked competitors: on the steep curve 2nd place gets ${pointsFor(2, n, "steep").toFixed(1)} ` +
     `and only the top ${steepHalf} get 50 points or more. ` +
     `On the gentle curve 2nd place gets ${pointsFor(2, n, "gentle").toFixed(1)} ` +
-    `and everyone down to place ${gentleAbove} gets 50 points or more.`;
+    `and everyone down to place ${gentleAbove} gets 50 points or more. ` +
+    `On linear + podium bonus the top ${Math.min(3, n)} get ` +
+    `${[1, 2, 3].filter((r) => r <= n).map((r) => pointsFor(r, n, "linearPodium").toFixed(1)).join(", ")} ` +
+    `and each further place is worth ${(100 / (n - 1)).toFixed(1)} points less than the one above.`;
 }
 
 function update(n) {

@@ -19,7 +19,7 @@
   <main>
     <section class="prose">
       <p>In every event, competitors are ranked and given points between <strong>100</strong> (1st place) and
-        <strong>0</strong> (last place). The places in between follow a logarithmic curve. There are two
+        <strong>0</strong> (last place). The places in between follow a curve. There are three
         curves to choose from on the <a href="index.html">standings page</a>:</p>
 
       <h2>Steep at the top</h2>
@@ -32,6 +32,12 @@
       <p>The mirror image of the steep curve. The top places are close together and the points only drop
         quickly near the bottom of the ranking.</p>
 
+      <h2>Linear + podium bonus</h2>
+      <p><span class="formula">points = 100 × (N − r) / (N − 1) + bonus</span></p>
+      <p>Points go down by the same amount for every place, from 100 for 1st to 0 for last. On top of that the
+        podium gets a bonus: <strong>+20</strong> for 1st, <strong>+10</strong> for 2nd and <strong>+5</strong>
+        for 3rd, so a win is worth 120 points. Tied competitors get the bonus of the place they share.</p>
+
       <h2>What r and N are</h2>
       <ul>
         <li><strong>r</strong> is the competitor's place (1 = best).</li>
@@ -39,7 +45,7 @@
           the people in the final round; with “Everyone in the event” it is everyone who competed in the event.</li>
         <li>Competitors without a valid result (DNF/DNS) get 0 and are not counted in N.</li>
         <li>Tied competitors share the same place and get the same points.</li>
-        <li>If only one person is ranked, they get 100.</li>
+        <li>If only one person is ranked, they get 100 (120 with the podium bonus).</li>
       </ul>
     </section>
 
@@ -55,10 +61,10 @@
       <div class="chart-legend">
         <span class="steep">Steep at the top</span>
         <span class="gentle">Gentle at the top</span>
-        <span class="linear">Straight line (for comparison)</span>
+        <span class="linear">Linear + podium bonus</span>
       </div>
       <div class="chart" id="chart">
-        <svg id="chart-svg" role="img" aria-label="Points by place for both curves"></svg>
+        <svg id="chart-svg" role="img" aria-label="Points by place for all three curves"></svg>
         <div id="chart-tooltip" class="chart-tooltip" hidden></div>
       </div>
 
@@ -69,6 +75,7 @@
               <th class="num">Place</th>
               <th class="pts">Steep</th>
               <th class="pts">Gentle</th>
+              <th class="pts">Linear + podium</th>
             </tr>
           </thead>
           <tbody id="points-body"></tbody>

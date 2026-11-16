@@ -28,6 +28,10 @@
           <input type="radio" name="formula" value="gentle">
           Gentle at the top: <code>100 × ln(N + 1 − r) / ln N</code>
         </label>
+        <label>
+          <input type="radio" name="formula" value="linearPodium">
+          Linear + podium bonus: <code>100 × (N − r) / (N − 1)</code>, plus +20 / +10 / +5 for 1st / 2nd / 3rd
+        </label>
       </fieldset>
       <fieldset>
         <legend>Who gets points in an event</legend>
@@ -40,7 +44,7 @@
           Everyone in the event
         </label>
       </fieldset>
-      <p class="hint">r = place, N = number of ranked competitors. 1st gets 100, last gets 0.
+      <p class="hint">r = place, N = number of ranked competitors. 1st gets 100, last gets 0 (before any podium bonus).
         Tied competitors share the same points. DNF/DNS gets 0.
         <a href="curve.html">How the curves work</a></p>
     </form>

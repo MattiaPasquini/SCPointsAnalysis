@@ -16,6 +16,7 @@
   --success-bg: #dafbe1;
   --series-1: #0969da;
   --series-2: #bf3989;
+  --series-3: #9a6700;
   --max-width-wide: 1200px;
 }
 
@@ -32,6 +33,7 @@
     --success-bg: #12261e;
     --series-1: #4493f8;
     --series-2: #db61a2;
+    --series-3: #d29922;
   }
 }
 
@@ -325,7 +327,7 @@ thead th.name {
 
 .chart-legend .steep::before { border-color: var(--series-1); }
 .chart-legend .gentle::before { border-color: var(--series-2); }
-.chart-legend .linear::before { border-color: var(--muted); border-top: 2px dashed var(--muted); }
+.chart-legend .linear::before { border-color: var(--series-3); }
 
 .chart {
   position: relative;
@@ -346,7 +348,8 @@ thead th.name {
 .chart .line { fill: none; stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
 .chart .line.steep { stroke: var(--series-1); }
 .chart .line.gentle { stroke: var(--series-2); }
-.chart .line.linear { stroke: var(--muted); stroke-width: 1.5; stroke-dasharray: 5 5; }
+.chart .line.linearPodium { stroke: var(--series-3); }
+.chart .dot.linearPodium { fill: var(--series-3); }
 .chart .dot.steep { fill: var(--series-1); }
 .chart .dot.gentle { fill: var(--series-2); }
 .chart .dot { stroke: var(--bg); stroke-width: 1.5; }
