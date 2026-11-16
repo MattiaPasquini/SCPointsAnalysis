@@ -8,9 +8,11 @@ const COMPETITIONS = [
   { id: "SwisscubingCupIII2026", tab: "SCIII", name: "Swisscubing Cup III 2026" },
   { id: "SwisscubingCupIV2026", tab: "SCIV", name: "Swisscubing Cup IV 2026" },
   { id: "SwisscubingCupV2026", tab: "SCV", name: "Swisscubing Cup V 2026" },
-  { id: "SwisscubingCupMBI2026", tab: "SCIMB", name: "Swisscubing Cup Mental Breakdown I 2026" },
-  { id: "SwisscubingCupMBII2026", tab: "SCIIMB", name: "Swisscubing Cup Mental Breakdown II 2026" },
+  { id: "SwisscubingCupMBI2026", tab: "SCIMB", name: "Swisscubing Cup Mental Breakdown I 2026", events: ["333bf", "333fm", "444bf", "555bf", "333mbf"] },
+  { id: "SwisscubingCupMBII2026", tab: "SCIIMB", name: "Swisscubing Cup Mental Breakdown II 2026", events: ["333bf", "333fm", "444bf", "555bf", "333mbf"] },
 ];
+// `events` (optional): only these events count for points. Competitors who
+// took part only in other events are treated as not having participated.
 const OVERALL_TAB = "Overall";
 
 // WCA event order and short labels.
@@ -196,7 +198,11 @@ function renderCompetition(comp, results, options) {
   const columns = events.map((e) => ({ key: e, label: EVENTS[e] || e, title: e }));
   return [
     el("h2", {}, el("a", { href: `${WCA}/competitions/${comp.id}`, textContent: comp.name, target: "_blank", rel: "noopener" })),
-    el("p", { className: "meta", textContent: `${people.length} competitors · ${events.length} events` }),
+    el("p", {
+      className: "meta",
+      textContent: `${people.length} competitors · ${events.length} events` +
+        (comp.events ? ` (only ${comp.events.map((e) => EVENTS[e] || e).join(", ")} count for points)` : ""),
+    }),
     pointsTable(columns, rankRows(people), (p, key) => p.byEvent[key]),
   ];
 }
@@ -268,8 +274,13 @@ async function main() {
   const errors = new Map();
   const settled = await Promise.allSettled(COMPETITIONS.map((c) => fetchResults(c.id)));
   settled.forEach((r, i) => {
-    if (r.status === "fulfilled") dataById.set(COMPETITIONS[i].id, r.value);
-    else errors.set(COMPETITIONS[i].id, r.reason);
+    const comp = COMPETITIONS[i];
+    if (r.status === "fulfilled") {
+      const results = comp.events ? r.value.filter((row) => comp.events.includes(row.event_id)) : r.value;
+      dataById.set(comp.id, results);
+    } else {
+      errors.set(comp.id, r.reason);
+    }
   });
   status.remove();
 
