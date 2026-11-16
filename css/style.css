@@ -375,3 +375,45 @@ thead th.name {
   max-width: 520px;
   margin-top: 1.5rem;
 }
+
+/* What-if panel */
+.options .what-if {
+  flex: 1 1 100%;
+}
+
+.what-if-toggle {
+  font-weight: 600;
+}
+
+.what-if-body {
+  border: none;
+  margin: 0.25rem 0 0;
+  padding: 0 0 0 1.5rem;
+}
+
+.what-if-body[disabled],
+.options fieldset[disabled] {
+  opacity: 0.5;
+}
+
+.what-if-body input[type="number"] {
+  width: 4.5rem;
+  font: inherit;
+  padding: 0.1rem 0.3rem;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.what-if-body .hint {
+  margin-top: 0.4rem;
+}
+
+.what-if-note {
+  font-size: 0.9rem;
+  border-left: 3px solid var(--series-3);
+  background: var(--surface);
+  padding: 0.4rem 0.75rem;
+  border-radius: 0 6px 6px 0;
+}

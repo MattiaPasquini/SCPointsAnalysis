@@ -33,27 +33,83 @@ const ROUND_ORDER = { "0": 0, h: 0, "1": 1, d: 1, "2": 2, e: 2, "3": 3, g: 3, c:
 const FINALIST_SPOTS = 20;
 const FINALIST_MIN_COMPS = 3;
 
+// What-if finals may hold at most this share of the round before the final.
+const WHAT_IF_MAX_SHARE = 0.75;
+
+const roundOrder = (r) => ROUND_ORDER[r.round_type_id] ?? 0;
+
+/**
+ * What-if final size for a round of `prevCount` competitors:
+ * the chosen percentage or number, capped at 75% of that round (at least 1).
+ */
+function whatIfFinalSize(prevCount, whatIf) {
+  const cap = Math.floor(prevCount * WHAT_IF_MAX_SHARE);
+  const wanted = whatIf.mode === "percent"
+    ? Math.floor((prevCount * whatIf.value) / 100)
+    : whatIf.value;
+  return Math.max(1, Math.min(wanted, cap));
+}
+
+/**
+ * Who reaches the what-if final: the top `size` of the round before the final
+ * (valid results only). If people tied on the last spot would push the final
+ * over 75%, the whole tied group is left out.
+ * Returns Map(wcaId -> pos in that round).
+ */
+function whatIfQualifiers(prevRows, size) {
+  const cap = Math.floor(prevRows.length * WHAT_IF_MAX_SHARE);
+  const valid = prevRows.filter((r) => r.best > 0).sort((a, b) => a.pos - b.pos);
+  if (!valid.length) return new Map();
+  const cutoffPos = valid[Math.min(size, valid.length) - 1].pos;
+  let chosen = valid.filter((r) => r.pos <= cutoffPos);
+  if (chosen.length > cap) chosen = chosen.filter((r) => r.pos < cutoffPos);
+  return new Map(chosen.map((r) => [r.wca_id, r.pos]));
+}
+
 /**
  * Points for one event of one competition.
- * Returns Map(wcaId -> points) for every competitor in the event.
+ * Returns { points: Map(wcaId -> points), final: { real, custom } | null }.
+ * `final` is set only when a what-if final was applied to this event.
  */
-function eventPoints(rows, { formula, scope }) {
-  const finalOrder = Math.max(...rows.map((r) => ROUND_ORDER[r.round_type_id] ?? 0));
+function eventPoints(rows, { formula, scope, whatIf }) {
+  const orders = [...new Set(rows.map(roundOrder))].sort((a, b) => a - b);
+  const finalOrder = orders[orders.length - 1];
 
   // Each competitor's last (furthest) round in this event.
   const last = new Map();
   for (const r of rows) {
-    const order = ROUND_ORDER[r.round_type_id] ?? 0;
+    const order = roundOrder(r);
     const prev = last.get(r.wca_id);
     if (!prev || order > prev.order) last.set(r.wca_id, { order, pos: r.pos, valid: r.best > 0 });
   }
 
   const points = new Map();
-  const ranked = [];
-  for (const [wcaId, entry] of last) {
-    points.set(wcaId, 0);
-    const eligible = scope === "everyone" || entry.order === finalOrder;
-    if (eligible && entry.valid) ranked.push({ wcaId, ...entry });
+  for (const wcaId of last.keys()) points.set(wcaId, 0);
+
+  let ranked = [];
+  let final = null;
+  if (whatIf && orders.length >= 2) {
+    // What-if: our own final, filled from the round before the real final.
+    // People who were in the real final keep their final result (ranked first);
+    // the extra qualifiers are ranked after them by their previous-round place.
+    const prevOrder = orders[orders.length - 2];
+    const prevRows = rows.filter((r) => roundOrder(r) === prevOrder);
+    const realFinal = new Map(rows.filter((r) => roundOrder(r) === finalOrder).map((r) => [r.wca_id, r]));
+    const size = whatIfFinalSize(prevRows.length, whatIf);
+    const qualifiers = whatIfQualifiers(prevRows, size);
+    for (const [wcaId, prevPos] of qualifiers) {
+      const f = realFinal.get(wcaId);
+      const entry = f ? { order: 1, pos: f.pos, valid: f.best > 0 } : { order: 0, pos: prevPos, valid: true };
+      if (entry.valid) ranked.push({ wcaId, ...entry });
+    }
+    final = { real: realFinal.size, custom: qualifiers.size };
+  } else {
+    // Real rounds. With the what-if on, this branch only handles one-round
+    // events, whose single round is the final; "Who gets points" is ignored.
+    for (const [wcaId, entry] of last) {
+      const eligible = (!whatIf && scope === "everyone") || entry.order === finalOrder;
+      if (eligible && entry.valid) ranked.push({ wcaId, ...entry });
+    }
   }
 
   // Later round beats earlier round; within a round, lower pos is better.
@@ -63,12 +119,12 @@ function eventPoints(rows, { formula, scope }) {
     const place = 1 + ranked.filter((o) => better(o, c)).length;
     points.set(c.wcaId, pointsFor(place, n, formula));
   }
-  return points;
+  return { points, final };
 }
 
 /**
  * Points table for one competition.
- * Returns { events: [eventId], people: [{ wcaId, name, country, byEvent: {eventId: pts}, total }] }
+ * Returns { events: [eventId], finals: {eventId: { real, custom }}, people: [{ wcaId, name, country, byEvent: {eventId: pts}, total }] }
  */
 function competitionPoints(results, options) {
   const people = new Map();
@@ -82,14 +138,17 @@ function competitionPoints(results, options) {
   }
 
   const events = [...byEvent.keys()].sort((a, b) => EVENT_ORDER.indexOf(a) - EVENT_ORDER.indexOf(b));
+  const finals = {};
   for (const eventId of events) {
-    for (const [wcaId, pts] of eventPoints(byEvent.get(eventId), options)) {
+    const { points, final } = eventPoints(byEvent.get(eventId), options);
+    if (final) finals[eventId] = final;
+    for (const [wcaId, pts] of points) {
       const p = people.get(wcaId);
       p.byEvent[eventId] = pts;
       p.total += pts;
     }
   }
-  return { events, people: [...people.values()] };
+  return { events, finals, people: [...people.values()] };
 }
 
 function overallPoints(dataById, options) {
@@ -194,17 +253,30 @@ function pointsTable(columns, rows, valueOf, extraColumns = []) {
 }
 
 function renderCompetition(comp, results, options) {
-  const { events, people } = competitionPoints(results, options);
-  const columns = events.map((e) => ({ key: e, label: EVENTS[e] || e, title: e }));
-  return [
+  const { events, finals, people } = competitionPoints(results, options);
+  const columns = events.map((e) => {
+    const f = finals[e];
+    const title = f ? `${e}: real final ${f.real}, what-if final ${f.custom}` : e;
+    return { key: e, label: EVENTS[e] || e, title };
+  });
+  const content = [
     el("h2", {}, el("a", { href: `${WCA}/competitions/${comp.id}`, textContent: comp.name, target: "_blank", rel: "noopener" })),
     el("p", {
       className: "meta",
       textContent: `${people.length} competitors · ${events.length} events` +
         (comp.events ? ` (only ${comp.events.map((e) => EVENTS[e] || e).join(", ")} count for points)` : ""),
     }),
-    pointsTable(columns, rankRows(people), (p, key) => p.byEvent[key]),
   ];
+  if (options.whatIf) {
+    const changed = events.filter((e) => finals[e]);
+    const oneRound = events.filter((e) => !finals[e]);
+    const parts = changed.map((e) => `${EVENTS[e] || e} ${finals[e].real} → ${finals[e].custom}`);
+    let text = `What-if final (${whatIfSummary(options.whatIf)}), finalists real → what-if: ${parts.join(" · ") || "none"}`;
+    if (oneRound.length) text += `. One-round events unchanged: ${oneRound.map((e) => EVENTS[e] || e).join(", ")}`;
+    content.push(el("p", { className: "what-if-note", textContent: text + "." }));
+  }
+  content.push(pointsTable(columns, rankRows(people), (p, key) => p.byEvent[key]));
+  return content;
 }
 
 function renderOverall(dataById, options) {
@@ -219,6 +291,9 @@ function renderOverall(dataById, options) {
       el("span", { className: "badge-finalist", textContent: "Finalist" }),
       ` = top ${FINALIST_SPOTS} by total among competitors with at least ${FINALIST_MIN_COMPS} competitions (${finalists} with the current options, ties included).`,
     ]),
+    ...(options.whatIf
+      ? [el("p", { className: "what-if-note", textContent: `What-if final is on: ${whatIfSummary(options.whatIf)} in every event with 2+ rounds. Open a competition tab to see each event's final size.` })]
+      : []),
     pointsTable(columns, rankRows(people), (p, key) => p.byComp[key], [compsColumn]),
   ];
 }
@@ -240,7 +315,27 @@ async function fetchResults(id) {
 
 function currentOptions(form) {
   const data = new FormData(form);
-  return { formula: data.get("formula"), scope: data.get("scope") };
+  let whatIf = null;
+  if (data.get("whatIf") === "on") {
+    const mode = data.get("whatIfMode");
+    const raw = Math.round(Number(data.get(mode === "percent" ? "whatIfPercent" : "whatIfCount")));
+    const value = Number.isFinite(raw) && raw >= 1 ? raw : 1;
+    whatIf = { mode, value: mode === "percent" ? Math.min(value, 75) : value };
+  }
+  return { formula: data.get("formula"), scope: data.get("scope"), whatIf };
+}
+
+/** Enable/disable the what-if inputs and the "Who gets points" choice to match the switch. */
+function syncWhatIfControls(form) {
+  const on = form.elements.whatIf.checked;
+  document.getElementById("what-if-body").disabled = !on;
+  document.getElementById("scope-options").disabled = on;
+}
+
+function whatIfSummary(whatIf) {
+  return whatIf.mode === "percent"
+    ? `top ${whatIf.value}% of the round before the final`
+    : `top ${whatIf.value} of the round before the final`;
 }
 
 async function main() {
@@ -303,7 +398,19 @@ async function main() {
     panel.replaceChildren(...content);
   }
 
-  form.addEventListener("change", render);
+  form.addEventListener("change", (ev) => {
+    if (ev.target.name === "whatIf") syncWhatIfControls(form);
+    // Typing in a what-if box selects its option.
+    if (ev.target.name === "whatIfPercent") form.elements.whatIfMode.value = "percent";
+    if (ev.target.name === "whatIfCount") form.elements.whatIfMode.value = "count";
+    render();
+  });
+  form.addEventListener("input", (ev) => {
+    if (ev.target.type !== "number") return;
+    form.elements.whatIfMode.value = ev.target.name === "whatIfPercent" ? "percent" : "count";
+    render();
+  });
+  syncWhatIfControls(form);
   window.addEventListener("hashchange", () => {
     activeTab = fromHash();
     render();

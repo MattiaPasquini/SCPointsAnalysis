@@ -4,7 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SC Points Analysis</title>
-  <link rel="stylesheet" href="css/style.css">
+  <!-- Bump ?v= on every CSS/JS link (both pages) when you change those files, so browsers fetch the new version. -->
+  <link rel="stylesheet" href="css/style.css?v=5">
 </head>
 <body>
   <header>
@@ -33,7 +34,7 @@
           Linear + podium bonus: <code>100 × (N − r) / (N − 1)</code>, plus +20 / +10 / +5 for 1st / 2nd / 3rd
         </label>
       </fieldset>
-      <fieldset>
+      <fieldset id="scope-options">
         <legend>Who gets points in an event</legend>
         <label>
           <input type="radio" name="scope" value="finalists" checked>
@@ -43,6 +44,28 @@
           <input type="radio" name="scope" value="everyone">
           Everyone in the event
         </label>
+      </fieldset>
+      <fieldset class="what-if">
+        <legend>What if: our own final</legend>
+        <label class="what-if-toggle">
+          <input type="checkbox" name="whatIf" id="what-if-on">
+          Replace the real finals with a custom final
+        </label>
+        <fieldset id="what-if-body" class="what-if-body" disabled>
+          <label>
+            <input type="radio" name="whatIfMode" value="percent" checked>
+            Top <input type="number" name="whatIfPercent" min="1" max="75" step="1" value="50" aria-label="Percentage"> %
+            of the round before the final
+          </label>
+          <label>
+            <input type="radio" name="whatIfMode" value="count">
+            Top <input type="number" name="whatIfCount" min="1" step="1" value="8" aria-label="Number of competitors">
+            competitors of the round before the final
+          </label>
+          <p class="hint">At most 75% of the round before the final can qualify; a bigger number is cut down to 75%.
+            People who were in the real final keep their final result; extra qualifiers are ranked after them by their
+            place in the previous round. One-round events are unchanged. While this is on, “Who gets points” is ignored.</p>
+        </fieldset>
       </fieldset>
       <p class="hint">r = place, N = number of ranked competitors. 1st gets 100, last gets 0 (before any podium bonus).
         Tied competitors share the same points. DNF/DNS gets 0.
@@ -59,7 +82,7 @@
       &copy; <span id="year"></span> SC Points Analysis</p>
   </footer>
 
-  <script src="js/points.js" defer></script>
-  <script src="js/main.js" defer></script>
+  <script src="js/points.js?v=5" defer></script>
+  <script src="js/main.js?v=5" defer></script>
 </body>
 </html>
