@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SC Points Analysis</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header>
+    <nav class="site-nav" aria-label="Pages">
+      <a href="index.html" aria-current="page">Standings</a>
+      <a href="curve.html">Points curve</a>
+    </nav>
+    <h1>SC Points Analysis</h1>
+    <p class="subtitle">Swisscubing Cup 2026 points, calculated from official World Cube Association results.</p>
+  </header>
+
+  <main id="app">
+    <form id="options" class="options">
+      <fieldset>
+        <legend>Points curve</legend>
+        <label>
+          <input type="radio" name="formula" value="steep" checked>
+          Steep at the top: <code>100 × (1 − ln r / ln N)</code>
+        </label>
+        <label>
+          <input type="radio" name="formula" value="gentle">
+          Gentle at the top: <code>100 × ln(N + 1 − r) / ln N</code>
+        </label>
+      </fieldset>
+      <fieldset>
+        <legend>Who gets points in an event</legend>
+        <label>
+          <input type="radio" name="scope" value="finalists" checked>
+          Only finalists
+        </label>
+        <label>
+          <input type="radio" name="scope" value="everyone">
+          Everyone in the event
+        </label>
+      </fieldset>
+      <p class="hint">r = place, N = number of ranked competitors. 1st gets 100, last gets 0.
+        Tied competitors share the same points. DNF/DNS gets 0.
+        <a href="curve.html">How the curves work</a></p>
+    </form>
+
+    <div id="tabs" class="tabs" role="tablist"></div>
+    <p id="status" class="status">Loading results…</p>
+    <section id="panel" class="panel" role="tabpanel"></section>
+  </main>
+
+  <footer>
+    <p>Data: <a href="https://www.worldcubeassociation.org/">World Cube Association</a> results API.
+      &copy; <span id="year"></span> SC Points Analysis</p>
+  </footer>
+
+  <script src="js/points.js" defer></script>
+  <script src="js/main.js" defer></script>
+</body>
+</html>
