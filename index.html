@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SC Points Analysis</title>
   <!-- Bump ?v= on every CSS/JS link (both pages) when you change those files, so browsers fetch the new version. -->
-  <link rel="stylesheet" href="css/style.css?v=6">
+  <link rel="stylesheet" href="css/style.css?v=11">
 </head>
 <body>
   <header>
@@ -32,6 +32,18 @@
         <label>
           <input type="radio" name="formula" value="linearPodium">
           Linear + podium bonus: <code>100 × (N − r) / (N − 1)</code>, plus +20 / +10 / +5 for 1st / 2nd / 3rd
+        </label>
+        <label>
+          <input type="radio" name="formula" value="thomas1">
+          Thomas option 1: fixed table, 250 for 1st, bigger drop after every 10 places
+        </label>
+        <label>
+          <input type="radio" name="formula" value="thomas2">
+          Thomas option 2: fixed table, 250 for 1st, no gaps
+        </label>
+        <label>
+          <input type="radio" name="formula" value="daniel">
+          Daniel: fixed table, 200 for 1st
         </label>
       </fieldset>
       <fieldset>
@@ -69,7 +81,8 @@
             ranked first, then everyone else by how far they got (at most the round before the final).</p>
         </fieldset>
       </fieldset>
-      <p class="hint">r = place, N = number of ranked competitors. 1st gets 100, last gets 0 (before any podium bonus).
+      <p class="hint">Curves: r = place, N = number of ranked competitors; 1st gets 100, last gets 0 (before any podium bonus).
+        Fixed tables: points depend only on the place, whatever N is; 51st and below get 0.
         Tied competitors share the same points. DNF/DNS gets 0.
         <a href="curve.html">How the curves work</a></p>
     </form>
@@ -84,7 +97,7 @@
       &copy; <span id="year"></span> SC Points Analysis</p>
   </footer>
 
-  <script src="js/points.js?v=6" defer></script>
-  <script src="js/main.js?v=6" defer></script>
+  <script src="js/points.js?v=11" defer></script>
+  <script src="js/main.js?v=11" defer></script>
 </body>
 </html>

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Points Curve</title>
   <!-- Bump ?v= on every CSS/JS link (both pages) when you change those files, so browsers fetch the new version. -->
-  <link rel="stylesheet" href="css/style.css?v=6">
+  <link rel="stylesheet" href="css/style.css?v=11">
 </head>
 <body>
   <header>
@@ -19,9 +19,10 @@
 
   <main>
     <section class="prose">
-      <p>In every event, competitors are ranked and given points between <strong>100</strong> (1st place) and
-        <strong>0</strong> (last place). The places in between follow a curve. There are three
-        curves to choose from on the <a href="index.html">standings page</a>:</p>
+      <p>In every event, competitors are ranked and given points by place. There are two kinds of points
+        systems to choose from on the <a href="index.html">standings page</a>: <strong>curves</strong>, which go
+        from 100 for 1st to 0 for last and stretch to fit the number of competitors, and <strong>fixed
+        tables</strong>, which give the same points for a place however many people competed.</p>
 
       <h2>Steep at the top</h2>
       <p><span class="formula">points = 100 × (1 − ln r / ln N)</span></p>
@@ -39,6 +40,22 @@
         podium gets a bonus: <strong>+20</strong> for 1st, <strong>+10</strong> for 2nd and <strong>+5</strong>
         for 3rd, so a win is worth 120 points. Tied competitors get the bonus of the place they share.</p>
 
+      <h2>Fixed tables</h2>
+      <p>Each place gets a set number of points, whatever the number of competitors. Places past 50th get 0.
+        Set N to 51 or more below to see every value.</p>
+      <ul>
+        <li><strong>Thomas option 1 (gaps every 10 places):</strong> 250, 220, 200, 180, then 5 points less per
+          place down to 150 for 10th. After every 10th place there is a bigger drop (150 → 130 for 11th,
+          94 → 74 for 21st, 47 → 37 for 31st, 19 → 10 for 41st), and in between the steps shrink from 4 to 3 to
+          2 to 1 point per place, ending at 1 for 50th.</li>
+        <li><strong>Thomas option 2 (no gaps):</strong> the same top 10 (250 down to 150), then steady steps
+          without the bigger drops: 6 points per place to 90 for 20th, 5 per place to 40 for 30th, 2 per place to
+          18 for 41st, then 9 for 42nd and 1 point less per place down to 1 for 50th.</li>
+        <li><strong>Daniel:</strong> 200, 170, 150, 135, then 6 points less per place to 87 for 12th, 4 per place
+          to 59 for 19th, about 3 per place to 39 for 25th, 2 per place to 13 for 38th, then 1 per place to 1 for
+          50th.</li>
+      </ul>
+
       <h2>What r and N are</h2>
       <ul>
         <li><strong>r</strong> is the competitor's place (1 = best).</li>
@@ -46,7 +63,9 @@
           the people in the final round; with “Everyone in the event” it is everyone who competed in the event.</li>
         <li>Competitors without a valid result (DNF/DNS) get 0 and are not counted in N.</li>
         <li>Tied competitors share the same place and get the same points.</li>
-        <li>If only one person is ranked, they get 100 (120 with the podium bonus).</li>
+        <li>If only one person is ranked, they get 100 on a curve (120 with the podium bonus) or 1st-place
+          points on a fixed table.</li>
+        <li>N only changes the curves. The fixed tables ignore it.</li>
       </ul>
     </section>
 
@@ -59,25 +78,18 @@
       </div>
       <p id="summary" class="meta"></p>
 
-      <div class="chart-legend">
-        <span class="steep">Steep at the top</span>
-        <span class="gentle">Gentle at the top</span>
-        <span class="linear">Linear + podium bonus</span>
-      </div>
+      <fieldset id="chart-legend" class="chart-legend">
+        <legend class="visually-hidden">Curves shown in the chart</legend>
+      </fieldset>
       <div class="chart" id="chart">
-        <svg id="chart-svg" role="img" aria-label="Points by place for all three curves"></svg>
+        <svg id="chart-svg" role="img" aria-label="Points by place for each points system"></svg>
         <div id="chart-tooltip" class="chart-tooltip" hidden></div>
       </div>
 
       <div class="table-wrap points-table">
         <table>
           <thead>
-            <tr>
-              <th class="num">Place</th>
-              <th class="pts">Steep</th>
-              <th class="pts">Gentle</th>
-              <th class="pts">Linear + podium</th>
-            </tr>
+            <tr id="points-head"></tr>
           </thead>
           <tbody id="points-body"></tbody>
         </table>
@@ -89,7 +101,7 @@
     <p>&copy; <span id="year"></span> SC Points Analysis</p>
   </footer>
 
-  <script src="js/points.js?v=6" defer></script>
-  <script src="js/curve.js?v=6" defer></script>
+  <script src="js/points.js?v=11" defer></script>
+  <script src="js/curve.js?v=11" defer></script>
 </body>
 </html>

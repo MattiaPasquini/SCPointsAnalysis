@@ -66,10 +66,17 @@ function whatIfQualifiers(prevRows, size) {
   return new Map(chosen.map((r) => [r.wca_id, r.pos]));
 }
 
+/** Round label for badges: rf = final, rq = qualification, r1/r2/r3 otherwise. */
+function roundLabel(order, finalOrder) {
+  if (order === finalOrder) return "rf";
+  return order === 0 ? "rq" : `r${order}`;
+}
+
 /**
  * Points for one event of one competition.
- * Returns { points: Map(wcaId -> points), final: { real, custom } | null }.
- * `final` is set only when a what-if final was applied to this event.
+ * Returns { points: Map(wcaId -> points), standing: Map(wcaId -> { round, place }), final: { real, custom } | null }.
+ * `standing` is the round each person reached (following the what-if when on) and
+ * their place in it (null for DNF). `final` is set only when a what-if final was applied.
  */
 function eventPoints(rows, { formula, scope, whatIf }) {
   const orders = [...new Set(rows.map(roundOrder))].sort((a, b) => a - b);
@@ -86,6 +93,14 @@ function eventPoints(rows, { formula, scope, whatIf }) {
   const points = new Map();
   for (const wcaId of last.keys()) points.set(wcaId, 0);
 
+  const standing = new Map();
+  const setStanding = (wcaId, order, pos, valid) =>
+    standing.set(wcaId, { round: roundLabel(order, finalOrder), place: valid ? pos : null });
+  for (const [wcaId, entry] of last) setStanding(wcaId, entry.order, entry.pos, entry.valid);
+
+  // Later round beats earlier round; within a round, lower pos is better.
+  const better = (a, b) => a.order > b.order || (a.order === b.order && a.pos < b.pos);
+
   let ranked = [];
   let final = null;
   if (whatIf && orders.length >= 2) {
@@ -99,27 +114,32 @@ function eventPoints(rows, { formula, scope, whatIf }) {
     const qualifiers = whatIfQualifiers(prevRows, size);
     // `order` here is a ranking tier: custom finalists sit above every real round.
     const FINAL_TIER = 100;
+    const finalists = [];
     for (const [wcaId, prevPos] of qualifiers) {
       const f = realFinal.get(wcaId);
       const entry = f
         ? { order: FINAL_TIER + 1, pos: f.pos, valid: f.best > 0 }
         : { order: FINAL_TIER, pos: prevPos, valid: true };
-      if (entry.valid) ranked.push({ wcaId, ...entry });
+      if (entry.valid) finalists.push({ wcaId, ...entry });
+      else setStanding(wcaId, finalOrder, 0, false);
     }
-    if (scope === "everyone") {
-      // Everyone else, ranked by how far they got with the custom final in place:
-      // nobody outside it got further than the round before the final.
-      const prevByPerson = new Map(prevRows.map((r) => [r.wca_id, r]));
-      for (const [wcaId, entry] of last) {
-        if (qualifiers.has(wcaId)) continue;
-        let capped = entry;
-        if (entry.order > prevOrder) {
-          const p = prevByPerson.get(wcaId);
-          if (!p) continue;
-          capped = { order: prevOrder, pos: p.pos, valid: p.best > 0 };
-        }
-        if (capped.valid) ranked.push({ wcaId, ...capped });
+    for (const c of finalists) {
+      setStanding(c.wcaId, finalOrder, 1 + finalists.filter((o) => better(o, c)).length, true);
+    }
+    ranked = finalists;
+
+    // Everyone else: nobody outside the custom final got further than the round before it.
+    const prevByPerson = new Map(prevRows.map((r) => [r.wca_id, r]));
+    for (const [wcaId, entry] of last) {
+      if (qualifiers.has(wcaId)) continue;
+      let capped = entry;
+      if (entry.order > prevOrder) {
+        const p = prevByPerson.get(wcaId);
+        if (!p) continue;
+        capped = { order: prevOrder, pos: p.pos, valid: p.best > 0 };
+        setStanding(wcaId, capped.order, capped.pos, capped.valid);
       }
+      if (scope === "everyone" && capped.valid) ranked.push({ wcaId, ...capped });
     }
     final = { real: realFinal.size, custom: qualifiers.size };
   } else {
@@ -130,14 +150,12 @@ function eventPoints(rows, { formula, scope, whatIf }) {
     }
   }
 
-  // Later round beats earlier round; within a round, lower pos is better.
-  const better = (a, b) => a.order > b.order || (a.order === b.order && a.pos < b.pos);
   const n = ranked.length;
   for (const c of ranked) {
     const place = 1 + ranked.filter((o) => better(o, c)).length;
     points.set(c.wcaId, pointsFor(place, n, formula));
   }
-  return { points, final };
+  return { points, standing, final };
 }
 
 /**
@@ -149,7 +167,7 @@ function competitionPoints(results, options) {
   const byEvent = new Map();
   for (const r of results) {
     if (!people.has(r.wca_id)) {
-      people.set(r.wca_id, { wcaId: r.wca_id, name: r.name, country: r.country_iso2, byEvent: {}, total: 0 });
+      people.set(r.wca_id, { wcaId: r.wca_id, name: r.name, country: r.country_iso2, byEvent: {}, standings: {}, total: 0 });
     }
     if (!byEvent.has(r.event_id)) byEvent.set(r.event_id, []);
     byEvent.get(r.event_id).push(r);
@@ -158,8 +176,9 @@ function competitionPoints(results, options) {
   const events = [...byEvent.keys()].sort((a, b) => EVENT_ORDER.indexOf(a) - EVENT_ORDER.indexOf(b));
   const finals = {};
   for (const eventId of events) {
-    const { points, final } = eventPoints(byEvent.get(eventId), options);
+    const { points, standing, final } = eventPoints(byEvent.get(eventId), options);
     if (final) finals[eventId] = final;
+    for (const [wcaId, st] of standing) people.get(wcaId).standings[eventId] = st;
     for (const [wcaId, pts] of points) {
       const p = people.get(wcaId);
       p.byEvent[eventId] = pts;
@@ -231,14 +250,79 @@ function el(tag, props = {}, children = []) {
 
 const fmt = (n) => (n === undefined ? "–" : n.toFixed(1));
 
-/** Sort by total (desc) then name, and attach shared ranks for ties. */
-function rankRows(rows) {
-  rows.sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
-  rows.forEach((row, i) => {
-    const prev = rows[i - 1];
-    row.rank = prev && Math.abs(prev.total - row.total) < 1e-9 ? prev.rank : i + 1;
+/* Column sorting: one { key, dir } per tab; key is "total" or a column key. */
+const DEFAULT_SORT = { key: "total", dir: "desc" };
+const sortByTab = {};
+let rerender = () => {};
+
+/**
+ * Sort rows best-first with `order` = { has(p), cmp(a, b), same(a, b) } and attach
+ * `rank` (1 = best, shared by rows where same() is true). Rows without a value go
+ * last with rank null. dir "asc" reverses the ranked rows.
+ */
+function sortRows(rows, order, dir) {
+  const ranked = rows.filter(order.has).sort(order.cmp);
+  ranked.forEach((row, i) => {
+    const prev = ranked[i - 1];
+    row.rank = prev && order.same(prev, row) ? prev.rank : i + 1;
   });
-  return rows;
+  const missing = rows.filter((p) => !order.has(p)).sort((a, b) => a.name.localeCompare(b.name));
+  for (const row of missing) row.rank = null;
+  return [...(dir === "asc" ? ranked.reverse() : ranked), ...missing];
+}
+
+/** Order by points, highest first; ties by total, then name. */
+function byPoints(scoreOf) {
+  return {
+    has: (p) => scoreOf(p) !== undefined,
+    cmp: (a, b) => scoreOf(b) - scoreOf(a) || b.total - a.total || a.name.localeCompare(b.name),
+    same: (a, b) => Math.abs(scoreOf(a) - scoreOf(b)) < 1e-9,
+  };
+}
+
+/**
+ * Order by result in an event: furthest round first (rf, then r3, r2, r1, rq),
+ * then place in that round; a DNF comes after the valid results of its round.
+ */
+function byPlace(standingOf) {
+  const roundRank = (round) => (round === "rf" ? 100 : round === "rq" ? 0 : Number(round.slice(1)));
+  const placeKey = (st) => (st.place === null ? Infinity : st.place);
+  return {
+    has: (p) => standingOf(p) !== undefined,
+    cmp: (a, b) => {
+      const sa = standingOf(a);
+      const sb = standingOf(b);
+      return roundRank(sb.round) - roundRank(sa.round) || placeKey(sa) - placeKey(sb) || a.name.localeCompare(b.name);
+    },
+    same: (a, b) => {
+      const sa = standingOf(a);
+      const sb = standingOf(b);
+      return sa.round === sb.round && placeKey(sa) === placeKey(sb);
+    },
+  };
+}
+
+/** A clickable header that sorts the table by its column. */
+function sortHeader(label, key, className, title, sort, tab) {
+  const active = sort.key === key;
+  const btn = el("button", { type: "button", className: "sort-btn", title: title || `Sort by ${label}` }, [
+    label,
+    // Every sortable header shows an arrow: ⇅ when not sorted, ▼/▲ for the current order.
+    el("span", {
+      className: active ? "sort-arrow active" : "sort-arrow",
+      textContent: active ? (sort.dir === "desc" ? "▼" : "▲") : "⇅",
+      ariaHidden: "true",
+    }),
+  ]);
+  btn.addEventListener("click", () => {
+    sortByTab[tab] = active
+      ? { key, dir: sort.dir === "desc" ? "asc" : "desc" }
+      : { key, dir: "desc" };
+    rerender();
+  });
+  const th = el("th", { className }, btn);
+  if (active) th.setAttribute("aria-sort", sort.dir === "desc" ? "descending" : "ascending");
+  return th;
 }
 
 function personCell(p) {
@@ -249,22 +333,51 @@ function personCell(p) {
   return el("td", { className: "name" }, [link, ...badge]);
 }
 
-/** extraColumns: [{ label, className, value(p) }] shown between Country and the points columns. */
-function pointsTable(columns, rows, valueOf, extraColumns = []) {
+function ordinal(n) {
+  const mod100 = n % 100;
+  if (mod100 >= 11 && mod100 <= 13) return `${n}th`;
+  return `${n}${{ 1: "st", 2: "nd", 3: "rd" }[n % 10] || "th"}`;
+}
+
+/** Small "4th - rf" badge: place in the round reached, and that round. */
+function standingBadge(st) {
+  if (!st) return [];
+  const place = st.place === null ? "DNF" : ordinal(st.place);
+  return [el("span", { className: "rank-badge", textContent: `${place} - ${st.round}` })];
+}
+
+/**
+ * tab: which tab this table belongs to (its sort order is remembered per tab).
+ * extraColumns: [{ label, className, value(p) }] shown between Country and the points columns.
+ * badgeOf(p, key): optional { round, place } shown as a small badge after the points.
+ * Clicking a column or Total sorts by it (event columns by place, the rest by
+ * points); clicking again flips the order. "#" is the rank by the sorted column.
+ */
+function pointsTable({ tab, columns, rows, valueOf, extraColumns = [], badgeOf = null }) {
+  const sort = sortByTab[tab] || DEFAULT_SORT;
+  // Event columns (with a place badge) sort by place; Total and Overall columns by points.
+  let order;
+  if (sort.key === "total") order = byPoints((p) => p.total);
+  else if (badgeOf) order = byPlace((p) => badgeOf(p, sort.key));
+  else order = byPoints((p) => valueOf(p, sort.key));
+  const sorted = sortRows(rows, order, sort.dir);
   const head = el("tr", {}, [
     el("th", { className: "num", textContent: "#" }),
     el("th", { className: "name", textContent: "Name" }),
     el("th", { textContent: "Country" }),
     ...extraColumns.map((x) => el("th", { className: x.className || "", textContent: x.label, title: x.title || "" })),
-    ...columns.map((c) => el("th", { className: "pts", textContent: c.label, title: c.title || "" })),
-    el("th", { className: "pts total", textContent: "Total" }),
+    ...columns.map((c) => sortHeader(c.label, c.key, "pts", c.title, sort, tab)),
+    sortHeader("Total", "total", "pts total", "Sort by total", sort, tab),
   ]);
-  const body = rows.map((p) => el("tr", {}, [
-    el("td", { className: "num", textContent: String(p.rank) }),
+  const body = sorted.map((p) => el("tr", {}, [
+    el("td", { className: "num", textContent: p.rank === null ? "–" : String(p.rank) }),
     personCell(p),
     el("td", { textContent: countryName(p.country) }),
     ...extraColumns.map((x) => el("td", { className: x.className || "", textContent: x.value(p) })),
-    ...columns.map((c) => el("td", { className: "pts", textContent: fmt(valueOf(p, c.key)) })),
+    ...columns.map((c) => el("td", { className: "pts" }, [
+      fmt(valueOf(p, c.key)),
+      ...(badgeOf ? standingBadge(badgeOf(p, c.key)) : []),
+    ])),
     el("td", { className: "pts total", textContent: fmt(p.total) }),
   ]));
   return el("div", { className: "table-wrap" }, el("table", {}, [el("thead", {}, head), el("tbody", {}, body)]));
@@ -293,7 +406,13 @@ function renderCompetition(comp, results, options) {
     if (oneRound.length) text += `. One-round events unchanged: ${oneRound.map((e) => EVENTS[e] || e).join(", ")}`;
     content.push(el("p", { className: "what-if-note", textContent: text + "." }));
   }
-  content.push(pointsTable(columns, rankRows(people), (p, key) => p.byEvent[key]));
+  content.push(pointsTable({
+    tab: comp.tab,
+    columns,
+    rows: people,
+    valueOf: (p, key) => p.byEvent[key],
+    badgeOf: (p, key) => p.standings[key],
+  }));
   return content;
 }
 
@@ -312,7 +431,13 @@ function renderOverall(dataById, options) {
     ...(options.whatIf
       ? [el("p", { className: "what-if-note", textContent: `What-if final is on (${whatIfSummary(options)}). It applies to every event with 2+ rounds; open a competition tab to see each event's final size.` })]
       : []),
-    pointsTable(columns, rankRows(people), (p, key) => p.byComp[key], [compsColumn]),
+    pointsTable({
+      tab: OVERALL_TAB,
+      columns,
+      rows: people,
+      valueOf: (p, key) => p.byComp[key],
+      extraColumns: [compsColumn],
+    }),
   ];
 }
 
@@ -414,6 +539,14 @@ async function main() {
     }
     panel.replaceChildren(...content);
   }
+  rerender = () => {
+    // Keep the table where it is when re-sorting.
+    const wrap = panel.querySelector(".table-wrap");
+    const scrollLeft = wrap ? wrap.scrollLeft : 0;
+    render();
+    const next = panel.querySelector(".table-wrap");
+    if (next) next.scrollLeft = scrollLeft;
+  };
 
   form.addEventListener("change", (ev) => {
     if (ev.target.name === "whatIf") syncWhatIfControls(form);
